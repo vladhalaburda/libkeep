@@ -1,0 +1,9 @@
+confluent_kafka
+fastapi
+loguru
+motor
+bcrypt
+pydantic
+pydantic[email]
+aiokafka
+uvicorn

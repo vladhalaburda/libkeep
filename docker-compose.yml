@@ -1,0 +1,123 @@
+version: '3.8'
+
+services:
+
+  traefik:
+    image: traefik:v2.10
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - "--configFile=/etc/traefik/traefik.yml"
+    ports:
+      - "80:80"       
+      - "443:443"     
+      - "8081:8080"   
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"  
+      - "./traefik.yml:/etc/traefik/traefik.yml:ro"     
+      - "./acme.json:/acme.json"                        
+    networks:
+      - traefik_net
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    restart: always
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    
+    networks:
+      - traefik_net
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    restart: always
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    
+    networks:
+      - traefik_net
+
+  kafka_ui:
+    image: provectuslabs/kafka-ui:latest
+    restart: always
+    depends_on: 
+      - kafka
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: kafka-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    
+    networks:
+      - traefik_net
+
+
+  user-service:
+    build: 
+      context: ./services/user/ 
+    restart: always
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.user-service.rule=Host(`user.docker.localhost`)"
+      - "traefik.http.services.user-service.loadbalancer.server.port=8001"
+
+    depends_on:
+      - kafka
+      - traefik
+       
+    environment:
+      - KAFKA_SERVER=kafka:29092
+      - MONGODB_URL=mongodb://172.27.132.179:27017/
+    
+    ports:
+      - "8001:8001"
+
+    volumes:
+      - ./services/user/app:/app 
+
+    networks:
+      - traefik_net
+
+
+  book-service:
+    build: 
+      context: ./services/book/ 
+    restart: always
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.book-service.rule=Host(`book.docker.localhost`)"
+      - "traefik.http.services.book-service.loadbalancer.server.port=8002"
+
+    depends_on:
+      - kafka
+      - traefik
+       
+    environment:
+      - KAFKA_SERVER=kafka:29092
+      - MONGODB_URL=mongodb://172.27.132.179:27017/
+    
+    ports:
+      - "8002:8002"
+
+    volumes:
+      - ./services/book/app:/app 
+
+    networks:
+      - traefik_net
+
+networks:
+  traefik_net:
+    driver: bridge

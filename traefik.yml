@@ -1,0 +1,25 @@
+providers:
+  docker:
+    exposedByDefault: false
+    defaultRule: "Host(`{{ trimPrefix `/` .Name }}.docker.localhost`)"
+
+entryPoints:
+  web:
+    address: ":80"
+  websecure:
+    address: ":443"
+
+api:
+  dashboard: true
+  insecure: true 
+
+certificatesResolvers:
+  myresolver:
+    acme:
+      email: "your-email@example.com"
+      storage: "acme.json"
+      httpChallenge:
+        entryPoint: web
+
+log:
+  level: DEBUG
